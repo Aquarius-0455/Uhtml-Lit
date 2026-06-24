@@ -1,3 +1,5 @@
+<div align="center"><img width="300" alt="image" src="docs/HTMLTestRunner-Lit_logo.png" /></div>
+
 # UhtmlLit
 
 现代化的 Python `unittest` HTML 测试报告生成器，支持全屏报告 UI、统计图表、截图附件、详情展开、主题切换、页面截图和 PDF 打印。
