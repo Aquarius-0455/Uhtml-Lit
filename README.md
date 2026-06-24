@@ -1,6 +1,4 @@
-<div align="center">
-  <img src="docs/HTMLTestRunner-Lit_logo.png" width="800" alt="HTMLTestRunner-Lit Logo">
-</div>
+<div align="center"><img width="300" alt="image" src="docs/HTMLTestRunner-Lit_logo.png" /></div>
 
 # HTMLTestRunner Lit 🎨
 
