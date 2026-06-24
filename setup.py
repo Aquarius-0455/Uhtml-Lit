@@ -1,17 +1,16 @@
 # -*- coding: utf-8 -*-
-from setuptools import setup, find_packages
+from setuptools import find_packages, setup
 
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setup(
-    name="htmltestrunner-lit",
+    name="uhtml-lit",
     version="1.0.6",
     author="Lit",
-    description="现代化的 Python unittest HTML 测试报告生成器",
+    description="Modern Python unittest HTML report generator.",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/Aquarius-0455/HTMLTestRunner-Lit",
     packages=find_packages(),
     classifiers=[
         "Development Status :: 5 - Production/Stable",
@@ -28,6 +27,5 @@ setup(
         "Operating System :: OS Independent",
     ],
     python_requires=">=3.7",
-    keywords="unittest, test, testing, report, html, htmltestrunner",
+    keywords="unittest, test, testing, report, html, htmltestrunner, uhtml-lit",
 )
-

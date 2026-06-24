@@ -3,9 +3,9 @@ requires = ["setuptools>=45", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "htmltestrunner-lit"
+name = "uhtml-lit"
 version = "1.0.6"
-description = "现代化的 Python unittest HTML 测试报告生成器"
+description = "Modern Python unittest HTML report generator."
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
@@ -26,10 +26,4 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Operating System :: OS Independent",
 ]
-keywords = ["unittest", "test", "testing", "report", "html", "htmltestrunner"]
-
-[project.urls]
-Homepage = "https://github.com/Aquarius-0455/HTMLTestRunner-Lit"
-Repository = "https://github.com/Aquarius-0455/HTMLTestRunner-Lit"
-Issues = "https://github.com/Aquarius-0455/HTMLTestRunner-Lit/issues"
-
+keywords = ["unittest", "test", "testing", "report", "html", "htmltestrunner", "uhtml-lit"]

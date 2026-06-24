@@ -1,18 +1,18 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 __author__ = "Lit"
 __version__ = "1.0.6"
 
 """
 Version 1.0.0
-* 使用Bootstrap 5和ECharts 5 UI
-* 深色模式支持 (可切换主题)
-* 专业简洁的Ant Design风格配色
-* 响应式设计优化 - 完美支持移动端
-* 统计卡片可视化展示
-* 环形图表设计与通过率展示
-* 支持跳过测试用例显示
-* 测试详情支持复制和滚动
-* 图表标签优化避免重叠
+* Bootstrap 5 and ECharts 5 UI
+* Light/dark theme support
+* Professional testing report layout
+* Responsive design
+* Statistic cards and chart visualization
+* Pass-rate doughnut chart
+* Skipped test display
+* Copyable test details
+* Optimized chart labels
 * Author: Lit
 
 """
@@ -29,6 +29,7 @@ import webbrowser
 import unittest
 from xml.sax import saxutils
 import base64
+import json
 from io import BytesIO
 
 
@@ -66,27 +67,13 @@ stderr_redirector = OutputRedirector(sys.stderr)
 #
 
 class ScreenshotManager:
-    """截图管理器 - 负责将各种格式的图片转换为 base64"""
+    """Screenshot manager: convert supported image sources to base64."""
     
     @staticmethod
     def to_base64(image_source, description=""):
-        """
-        将图片转换为 base64 格式
-        
-        参数:
-            image_source: 支持以下类型
-                - str: 文件路径
-                - bytes: 图片二进制数据  
-                - PIL.Image: PIL 图片对象
-                - selenium.webdriver: Selenium WebDriver 对象
-            description: 截图描述
-            
-        返回:
-            dict: {'data': base64_string, 'description': description}
-            None: 转换失败
-        """
+        """Convert a supported image source to a base64 screenshot dictionary."""
         try:
-            # 1. 处理文件路径
+            # 1. File path
             if isinstance(image_source, str):
                 if os.path.exists(image_source):
                     with open(image_source, 'rb') as f:
@@ -96,14 +83,14 @@ class ScreenshotManager:
                         'description': description or os.path.basename(image_source)
                     }
             
-            # 2. 处理 bytes
+            # 2. Raw bytes
             elif isinstance(image_source, bytes):
                 return {
                     'data': base64.b64encode(image_source).decode('utf-8'),
                     'description': description or 'Screenshot'
                 }
             
-            # 3. 处理 PIL Image
+            # 3. PIL Image
             elif hasattr(image_source, 'save'):
                 buffer = BytesIO()
                 image_source.save(buffer, format='PNG')
@@ -113,7 +100,7 @@ class ScreenshotManager:
                     'description': description or 'PIL Image'
                 }
             
-            # 4. 处理 Selenium WebDriver
+            # 4. Selenium WebDriver
             elif hasattr(image_source, 'get_screenshot_as_png'):
                 img_data = image_source.get_screenshot_as_png()
                 return {
@@ -128,30 +115,16 @@ class ScreenshotManager:
         return None
 
 
-# 全局变量，用于存储当前的 TestResult 实例
+# Global reference to the active TestResult instance.
 _current_result = None
 
 
 def attach_screenshot(image_source, description=""):
-    """
-    全局函数：在测试用例中添加截图
-    
-    使用示例:
-        from htmltestrunner import attach_screenshot
-        
-        # Selenium 截图
-        attach_screenshot(driver, "登录页面")
-        
-        # 文件路径
-        attach_screenshot("/path/to/image.png", "错误截图")
-        
-        # PIL Image
-        attach_screenshot(pil_image, "处理后的图片")
-    """
+    """Attach a screenshot to the currently running test case."""
     if _current_result:
         _current_result.attach_screenshot(image_source, description)
     else:
-        sys.stderr.write("警告: 无法添加截图，测试未在运行中\n")
+        sys.stderr.write("警告: 无法添加截图，当前没有正在运行的测试\n")
 
 
 # ----------------------------------------------------------------------
@@ -199,10 +172,10 @@ class Template_mixin(object):
     """
 
     STATUS = {
-        0: u'通过',
-        1: u'失败',
-        2: u'错误',
-        3: u'跳过',
+        0: '通过',
+        1: '失败',
+        2: '错误',
+        3: '跳过',
     }
 
     DEFAULT_TITLE = 'Unit Test Report'
@@ -222,8 +195,13 @@ class Template_mixin(object):
     <!-- Bootstrap 5.3 -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <!-- Element Plus visual tokens -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-plus@2.13.3/dist/index.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fontsource-variable/inter@5.2.8/index.min.css">
     <!-- ECharts 5.x -->
     <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <!-- Page capture -->
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <!-- Bootstrap 5 JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
@@ -240,26 +218,26 @@ class Template_mixin(object):
             const id = tr.id;
             // ft: fail test, pt: pass test, st: skip test
             if (id.substr(0,2) === 'ft') {
-                // 失败/错误用例：总结时隐藏，失败和全部时显示
+                // Failed/error rows are hidden in summary and visible in failed/all views.
                 tr.style.display = level < 1 ? 'none' : 'table-row';
             }
             if (id.substr(0,2) === 'pt') {
-                // 通过用例：只在全部时显示
+                // Passed rows are only visible in all view.
                 tr.style.display = level > 1 ? 'table-row' : 'none';
             }
             if (id.substr(0,2) === 'st') {
-                // 跳过用例：只在全部时显示
+                // Skipped rows are only visible in all view.
                 tr.style.display = level > 1 ? 'table-row' : 'none';
             }
         }
         
-        // 更新按钮激活状态
+        // Update active filter button.
         document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
         event.target.classList.add('active');
     }
 
     function showClassDetail(cid, count) {
-        // 找到第一个测试用例元素，判断当前是显示还是隐藏
+        // Find the first test row to decide whether the class is expanded.
         const tid0 = 't' + cid.substr(1) + '.1';
         let firstTid = 'f' + tid0;
         let firstElem = document.getElementById(firstTid);
@@ -270,10 +248,10 @@ class Template_mixin(object):
         
         if (!firstElem) return;
         
-        // 判断当前状态：如果是隐藏的，则展开；如果是显示的，则隐藏
+        // Toggle all test rows in this class.
         const isHidden = firstElem.style.display === 'none' || firstElem.style.display === '';
         
-        // 切换所有测试用例的显示状态
+        // Toggle visibility for each test row.
         for (let i = 0; i < count; i++) {
             const tid0 = 't' + cid.substr(1) + '.' + (i+1);
             let tid = 'f' + tid0;
@@ -285,7 +263,7 @@ class Template_mixin(object):
             
             if (elem) {
                 elem.style.display = isHidden ? 'table-row' : 'none';
-                // 如果隐藏测试用例，同时隐藏其详情窗口
+                // Hide detail panels when collapsing rows.
                 const divElem = document.getElementById('div_' + tid);
                 if (divElem && !isHidden) {
                     divElem.style.display = 'none';
@@ -297,31 +275,67 @@ class Template_mixin(object):
     function showTestDetail(div_id){
         const details_div = document.getElementById(div_id);
         const displayState = details_div.style.display;
-        details_div.style.display = (displayState !== 'block') ? 'block' : 'none';
+        details_div.style.display = (displayState !== 'table-row') ? 'table-row' : 'none';
+    }
+
+    function toggleAllDetails(button) {
+        const detailRows = Array.from(document.querySelectorAll('.detail-row'));
+        const shouldExpand = detailRows.some(row => row.style.display === 'none' || row.style.display === '');
+        detailRows.forEach(row => {
+            row.style.display = shouldExpand ? 'table-row' : 'none';
+        });
+        if (button) {
+            button.classList.toggle('detail-active', shouldExpand);
+            const label = button.querySelector('.tool-label');
+            if (label) label.textContent = shouldExpand ? '收起详情' : '展开详情';
+        }
+    }
+
+    function savePageScreenshot() {
+        const target = document.querySelector('.pt-main');
+        if (!target || typeof html2canvas === 'undefined') {
+            alert('截图组件未加载，请稍后重试');
+            return;
+        }
+        html2canvas(target, {
+            backgroundColor: getComputedStyle(document.body).backgroundColor,
+            scale: Math.min(window.devicePixelRatio || 1, 2),
+            useCORS: true
+        }).then(canvas => {
+            const link = document.createElement('a');
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            link.download = 'test-report-' + timestamp + '.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        });
+    }
+
+    function exportPdf() {
+        window.print();
     }
     
-    // 复制测试详情内容
+    // Copy test detail content.
     function copyTestDetail(contentId, button) {
         const content = document.getElementById(contentId);
         if (!content) return;
         
         const text = content.textContent;
         
-        // 使用现代浏览器的Clipboard API
+        // Use Clipboard API when available.
         if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(text).then(() => {
                 showCopySuccess(button);
             }).catch(() => {
-                // 降级到旧方法
+                // Fallback for older browsers.
                 fallbackCopy(text, button);
             });
         } else {
-            // 降级到旧方法
+            // Fallback for older browsers.
             fallbackCopy(text, button);
         }
     }
     
-    // 降级复制方法
+    // Fallback copy method.
     function fallbackCopy(text, button) {
         const textarea = document.createElement('textarea');
         textarea.value = text;
@@ -338,7 +352,7 @@ class Template_mixin(object):
         document.body.removeChild(textarea);
     }
     
-    // 显示复制成功提示
+    // Show copy success state.
     function showCopySuccess(button) {
         const originalHTML = button.innerHTML;
         button.innerHTML = '<i class="bi bi-check-lg"></i> 已复制';
@@ -350,7 +364,7 @@ class Template_mixin(object):
         }, 2000);
     }
     
-    // 主题切换功能
+    // Theme toggle.
     function toggleTheme() {
         const html = document.documentElement;
         const currentTheme = html.getAttribute('data-bs-theme');
@@ -358,26 +372,32 @@ class Template_mixin(object):
         html.setAttribute('data-bs-theme', newTheme);
         localStorage.setItem('theme', newTheme);
         
-        // 更新图表主题
+        // Recreate chart after theme changes.
         const chart = echarts.getInstanceByDom(document.getElementById('chart'));
         if (chart) {
             chart.dispose();
-            initChart();
         }
+        const suiteChart = echarts.getInstanceByDom(document.getElementById('suiteChart'));
+        if (suiteChart) {
+            suiteChart.dispose();
+        }
+        initChart();
     }
     
-    // 页面加载时恢复主题
+    // Restore saved theme on page load.
     document.addEventListener('DOMContentLoaded', function() {
         const savedTheme = localStorage.getItem('theme') || 'light';
         document.documentElement.setAttribute('data-bs-theme', savedTheme);
     });
     </script>
 
-    <div class="container-fluid">
-        %(heading)s
-        %(report)s
-        %(ending)s
-    </div>
+    <main class="pt-main">
+        <div class="container-fluid pt-content">
+            %(heading)s
+            %(report)s
+        </div>
+    </main>
+    %(ending)s
     %(chart_script)s
 </body>
 </html>
@@ -394,24 +414,25 @@ class Template_mixin(object):
         const failCount = %(fail)s;
         const errorCount = %(error)s;
         const skipCount = %(skip)s;
+        const suiteStats = %(suite_stats)s;
         const total = passCount + failCount + errorCount + skipCount;
         const passRate = total > 0 ? ((passCount / total) * 100).toFixed(1) : 0;
 
         const option = {
             title: {
-                text: '测试执行情况',
-                subtext: '通过率: ' + passRate + '%%',
+                text: passRate + '%%',
+                subtext: '通过率',
                 left: 'center',
-                top: '2%%',
+                top: '35%%',
                 textStyle: {
-                    fontSize: 16,
-                    fontWeight: 600,
+                    fontSize: 28,
+                    fontWeight: 700,
                     color: isDark ? '#e8e8e8' : '#262626'
                 },
                 subtextStyle: {
-                    fontSize: 13,
+                    fontSize: 12,
                     color: isDark ? '#a6a6a6' : '#8c8c8c',
-                    lineHeight: 24
+                    lineHeight: 20
                 }
             },
             tooltip: {
@@ -427,11 +448,13 @@ class Template_mixin(object):
             },
             legend: {
                 orient: 'horizontal',
-                bottom: '5%%',
+                bottom: 2,
                 left: 'center',
-                itemGap: 24,
+                itemGap: 10,
+                itemWidth: 14,
+                itemHeight: 8,
                 textStyle: {
-                    fontSize: 13,
+                    fontSize: 11,
                     color: isDark ? '#e8e8e8' : '#262626'
                 },
                 data: ['通过', '失败', '错误', '跳过'],
@@ -449,8 +472,8 @@ class Template_mixin(object):
                 {
                     name: '测试结果',
                     type: 'pie',
-                    radius: ['40%%', '60%%'],
-                    center: ['50%%', '50%%'],
+                    radius: ['48%%', '65%%'],
+                    center: ['50%%', '43%%'],
                     avoidLabelOverlap: true,
                     itemStyle: {
                         borderRadius: 4,
@@ -458,11 +481,11 @@ class Template_mixin(object):
                         borderWidth: 2
                     },
                     label: {
-                        show: true,
+                        show: false,
                         position: 'outside',
                         formatter: function(params) {
                             if (params.value === 0) {
-                                return '';  // 不显示值为0的标签
+                                return '';  // Hide zero-value labels.
                             }
                             return params.name + '\\n' + params.value + ' (' + params.percent + '%%)';
                         },
@@ -486,9 +509,9 @@ class Template_mixin(object):
                         scaleSize: 5
                     },
                     labelLine: {
-                        show: true,
+                        show: false,
                         length: 15,
-                        length2: 60,
+                        length2: 24,
                         smooth: true,
                         lineStyle: {
                             color: isDark ? '#434343' : '#d9d9d9',
@@ -527,14 +550,115 @@ class Template_mixin(object):
         };
 
         myChart.setOption(option);
-        
-        // 响应式调整
+
+        const suiteChartDom = document.getElementById('suiteChart');
+        if (suiteChartDom) {
+            const suiteChart = echarts.init(suiteChartDom);
+            const suiteNames = suiteStats.map(item => item.name);
+            const suiteOption = {
+                color: ['#52c41a', '#faad14', '#f5222d', '#1890ff'],
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    backgroundColor: isDark ? 'rgba(0, 0, 0, 0.85)' : 'rgba(255, 255, 255, 0.95)',
+                    borderColor: isDark ? '#434343' : '#d9d9d9',
+                    borderWidth: 1,
+                    textStyle: {
+                        color: isDark ? '#e8e8e8' : '#262626',
+                        fontSize: 12
+                    }
+                },
+                legend: {
+                    top: 0,
+                    right: 8,
+                    itemGap: 10,
+                    itemWidth: 14,
+                    itemHeight: 8,
+                    textStyle: {
+                        fontSize: 11,
+                        color: isDark ? '#e8e8e8' : '#262626'
+                    },
+                    data: ['通过', '失败', '错误', '跳过']
+                },
+                grid: {
+                    left: 10,
+                    right: 14,
+                    top: 34,
+                    bottom: 10,
+                    containLabel: true
+                },
+                xAxis: {
+                    type: 'value',
+                    axisLabel: {
+                        color: isDark ? '#a6a6a6' : '#64748b',
+                        fontSize: 10
+                    },
+                    splitLine: {
+                        lineStyle: {
+                            color: isDark ? '#2f3746' : '#edf2f7'
+                        }
+                    }
+                },
+                yAxis: {
+                    type: 'category',
+                    data: suiteNames,
+                    axisLabel: {
+                        color: isDark ? '#e8e8e8' : '#262626',
+                        fontSize: 10,
+                        width: 110,
+                        overflow: 'truncate'
+                    },
+                    axisTick: { show: false }
+                },
+                series: [
+                    {
+                        name: '通过',
+                        type: 'bar',
+                        stack: 'total',
+                        barMaxWidth: 14,
+                        emphasis: { focus: 'series' },
+                        data: suiteStats.map(item => item.pass)
+                    },
+                    {
+                        name: '失败',
+                        type: 'bar',
+                        stack: 'total',
+                        barMaxWidth: 14,
+                        emphasis: { focus: 'series' },
+                        data: suiteStats.map(item => item.fail)
+                    },
+                    {
+                        name: '错误',
+                        type: 'bar',
+                        stack: 'total',
+                        barMaxWidth: 14,
+                        emphasis: { focus: 'series' },
+                        data: suiteStats.map(item => item.error)
+                    },
+                    {
+                        name: '跳过',
+                        type: 'bar',
+                        stack: 'total',
+                        barMaxWidth: 14,
+                        emphasis: { focus: 'series' },
+                        data: suiteStats.map(item => item.skip)
+                    }
+                ]
+            };
+
+            suiteChart.setOption(suiteOption);
+            window.addEventListener('resize', function() {
+                suiteChart.resize();
+            });
+        }
+
+        // Responsive resize.
         window.addEventListener('resize', function() {
             myChart.resize();
         });
     }
     
-    // 页面加载完成后初始化图表
+    // Initialize chart when page is ready.
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', initChart);
     } else {
@@ -592,7 +716,7 @@ body {
         margin: 0 auto;
     }
 
-    /* 头部样式 */
+    /* Header */
     .header-card {
         background: white;
         border-radius: 8px;
@@ -621,36 +745,7 @@ body {
         color: var(--primary-color);
 }
 
-.theme-toggle {
-    position: fixed;
-    top: 24px;
-    right: 24px;
-    z-index: 1000;
-        background: white;
-        border: 1px solid var(--border-color);
-        border-radius: 6px;
-        width: 36px;
-        height: 36px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-        transition: all 0.2s;
-        color: var(--text-color);
-    }
-
-    [data-bs-theme="dark"] .theme-toggle {
-        background: #1f1f1f;
-        border-color: var(--border-color);
-}
-
-.theme-toggle:hover {
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-        border-color: var(--primary-color);
-}
-
-    /* 统计卡片 */
+    /* Statistics */
 .stats-grid {
     display: grid;
         grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -700,7 +795,7 @@ body {
         opacity: 0.8;
     }
 
-    /* 图表卡片 */
+    /* Chart */
     .chart-card {
         background: white;
         border-radius: 8px;
@@ -715,7 +810,7 @@ body {
         border-color: var(--border-color);
     }
 
-    /* 过滤按钮 */
+    /* Filters */
     .filter-buttons {
         margin-bottom: 0;
     }
@@ -746,7 +841,7 @@ body {
         color: white;
     }
 
-    /* 表格样式 */
+    /* Table */
 .table-card {
         background: white;
         border-radius: 8px;
@@ -858,7 +953,7 @@ body {
     font-size: 14px;
     }
 
-    /* 详情弹窗 */
+    /* Detail panel */
     .popup_link {
         display: inline-flex;
     align-items: center;
@@ -950,7 +1045,7 @@ body {
         border-color: var(--success-color) !important;
     }
 
-    /* 响应式设计 */
+    /* Responsive */
 @media (max-width: 768px) {
         body {
             padding: 16px;
@@ -977,7 +1072,7 @@ body {
         }
     }
 
-    /* 徽章样式 */
+    /* Badges */
     .badge {
         padding: 2px 8px;
         border-radius: 4px;
@@ -985,7 +1080,7 @@ body {
         font-size: 12px;
         }
 
-    /* 滚动条美化 */
+    /* Scrollbars */
     ::-webkit-scrollbar {
         width: 8px;
         height: 8px;
@@ -1012,7 +1107,7 @@ body {
         background: rgba(255, 255, 255, 0.3);
 }
 
-    /* 截图样式 */
+    /* Screenshots */
     .screenshot-section {
         margin-top: 20px;
         padding-top: 20px;
@@ -1066,7 +1161,7 @@ body {
         color: white;
     }
 
-    /* 轮播模式 */
+    /* Carousel view */
     .screenshot-carousel {
         position: relative;
         width: 100%;
@@ -1164,7 +1259,7 @@ body {
         border-radius: 4px;
     }
 
-    /* 网格模式 */
+    /* Grid view */
     .screenshot-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
@@ -1196,7 +1291,7 @@ body {
         box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
     }
 
-    /* 图片预览模态框 */
+    /* Image preview modal */
     .image-modal {
         display: none;
         position: fixed;
@@ -1306,6 +1401,1141 @@ body {
         from { transform: translate(-50%, -50%) scale(0.8); }
         to { transform: translate(-50%, -50%) scale(1); }
     }
+
+    /* Clean fullscreen report workspace */
+    :root {
+        --app-bg: #f6f8fb;
+        --panel-bg: #ffffff;
+        --panel-soft: #f8fafc;
+        --border: #e5e7eb;
+        --text-main: #111827;
+        --text-muted: #64748b;
+        --primary: #4f46e5;
+        --success: #10b981;
+        --warning: #f59e0b;
+        --danger: #ef4444;
+        --info: #3b82f6;
+        --shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+    }
+
+    [data-bs-theme="dark"] {
+        --app-bg: #0f172a;
+        --panel-bg: #111827;
+        --panel-soft: #172033;
+        --border: #273244;
+        --text-main: #f8fafc;
+        --text-muted: #94a3b8;
+        --primary: #818cf8;
+        --success: #34d399;
+        --warning: #fbbf24;
+        --danger: #fb7185;
+        --info: #60a5fa;
+    }
+
+    html,
+    body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+    }
+
+    body {
+        padding: 0;
+        background: var(--app-bg);
+        color: var(--text-main);
+        font-family: "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+    }
+
+    .pt-main {
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+        background: var(--app-bg);
+    }
+
+    .pt-content.container-fluid {
+        max-width: none;
+        height: 100vh;
+        padding: 16px;
+        display: grid;
+        grid-template-columns: 500px minmax(0, 1fr);
+        grid-template-rows: 48px minmax(190px, 22vh) minmax(0, 1fr);
+        gap: 12px;
+    }
+
+    .header-card,
+    .chart-card,
+    .table-card {
+        border: 1px solid var(--border) !important;
+        border-radius: 12px !important;
+        background: var(--panel-bg) !important;
+        box-shadow: var(--shadow) !important;
+    }
+
+    .page-header {
+        grid-column: 1 / -1;
+        grid-row: 1;
+        min-height: 0;
+        padding: 0 12px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--panel-bg);
+        box-shadow: var(--shadow);
+    }
+
+    .page-title {
+        min-width: 0;
+        margin: 0;
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--text-main);
+        font-size: 18px;
+        line-height: 1.2;
+        font-weight: 850;
+        letter-spacing: 0;
+    }
+
+    .page-title i {
+        width: 30px;
+        height: 30px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 9px;
+        background: #eef2ff;
+        color: var(--primary);
+        font-size: 16px;
+        flex: 0 0 auto;
+    }
+
+    [data-bs-theme="dark"] .page-title i {
+        background: rgba(129, 140, 248, 0.16);
+    }
+
+    .header-card {
+        grid-column: 1;
+        grid-row: 2 / 4;
+        height: 100%;
+        padding: 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        min-height: 0;
+        overflow: auto;
+    }
+
+    .report-title {
+        margin: 0;
+        padding-right: 52px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        color: var(--text-main);
+        font-size: 20px;
+        line-height: 1.25;
+        font-weight: 800;
+        letter-spacing: 0;
+    }
+
+    .report-title i {
+        width: 36px;
+        height: 36px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 10px;
+        background: #eef2ff;
+        color: var(--primary);
+        font-size: 18px;
+        flex: 0 0 auto;
+    }
+
+    [data-bs-theme="dark"] .report-title i {
+        background: rgba(129, 140, 248, 0.16);
+    }
+
+    .overview-card {
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--panel-soft);
+    }
+
+    .overview-title {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--text-main);
+        font-size: 13px;
+        font-weight: 800;
+    }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        margin: 0;
+    }
+
+    .meta-item {
+        min-width: 0;
+        min-height: 58px;
+        padding: 10px;
+        display: grid;
+        grid-template-columns: 30px minmax(0, 1fr);
+        align-items: center;
+        gap: 8px;
+        border: 1px solid var(--border);
+        border-radius: 9px;
+        background: var(--panel-bg);
+    }
+
+    .meta-icon {
+        width: 30px;
+        height: 30px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        background: var(--panel-soft);
+        color: var(--text-muted);
+        font-size: 15px;
+    }
+
+    .meta-item.info .meta-icon { color: #06b6d4; }
+    .meta-item.primary .meta-icon { color: var(--primary); }
+    .meta-item.success .meta-icon { color: var(--success); }
+    .meta-item.secondary .meta-icon { color: var(--text-muted); }
+
+    .meta-body {
+        min-width: 0;
+    }
+
+    .meta-label {
+        display: block;
+        color: var(--text-muted);
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1.2;
+    }
+
+    .meta-value {
+        display: block;
+        margin-top: 5px;
+        color: var(--text-main);
+        font-size: 13px;
+        line-height: 1.35;
+        font-weight: 800;
+        word-break: break-word;
+    }
+
+    .report-status-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+    }
+
+    .report-status-pill {
+        display: inline-flex;
+        align-items: center;
+        height: 20px;
+        padding: 0 7px;
+        border-radius: 999px;
+        color: #fff;
+        font-size: 10px;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .report-status-pill.pass { background: var(--success); }
+    .report-status-pill.fail { background: var(--warning); }
+    .report-status-pill.error { background: var(--danger); }
+    .report-status-pill.skip { background: var(--primary); }
+    .report-status-pill.neutral { background: var(--text-muted); }
+
+    .description-panel {
+        padding: 10px;
+        border: 1px solid var(--border);
+        border-radius: 9px;
+        background: var(--panel-bg);
+    }
+
+    .description-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--text-muted);
+        font-size: 11px;
+        font-weight: 800;
+    }
+
+    .description {
+        margin: 6px 0 0 !important;
+        color: var(--text-main) !important;
+        font-size: 13px !important;
+        line-height: 1.5;
+    }
+
+    .chart-card {
+        grid-column: 2;
+        grid-row: 2;
+        height: 100%;
+        padding: 12px;
+        min-height: 0;
+        overflow: hidden;
+        display: grid;
+        grid-template-columns: minmax(320px, 35%) minmax(0, 1fr);
+        gap: 12px;
+    }
+
+    .chart-panel {
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--panel-soft);
+        overflow: hidden;
+    }
+
+    .chart-panel-title {
+        flex: 0 0 auto;
+        height: 34px;
+        padding: 0 12px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        color: var(--text-main);
+        font-size: 13px;
+        font-weight: 800;
+        border-bottom: 1px solid var(--border);
+        background: var(--panel-bg);
+    }
+
+    .chart-panel-title span {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .chart-canvas {
+        flex: 1 1 auto;
+        min-height: 0;
+    }
+
+    #chart,
+    #suiteChart {
+        width: 100% !important;
+        height: 100% !important;
+        min-height: 140px;
+    }
+
+    .table-card {
+        grid-column: 2;
+        grid-row: 3;
+        height: 100%;
+        min-height: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: visible;
+    }
+
+    .table-card > .d-flex {
+        flex: 0 0 auto;
+        min-height: 54px;
+        margin: 0 !important;
+        padding: 12px 16px;
+        gap: 12px;
+        flex-wrap: wrap;
+        border-bottom: 1px solid var(--border);
+        background: var(--panel-bg);
+    }
+
+    .table-card h2 {
+        margin: 0;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--text-main);
+        font-size: 16px;
+        font-weight: 800;
+        letter-spacing: 0;
+    }
+
+    .filter-buttons {
+        gap: 4px;
+        padding: 4px;
+        border: 0;
+        border-radius: 10px;
+        background: var(--panel-soft);
+    }
+
+    .filter-btn {
+        height: 30px;
+        padding: 0 14px;
+        border: 0;
+        border-radius: 8px !important;
+        background: transparent;
+        color: var(--text-muted);
+        font-size: 12px;
+        font-weight: 700;
+        transform: translateY(0);
+        transition: background-color 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+    }
+
+    .filter-btn:hover {
+        color: var(--primary);
+        transform: translateY(-1px);
+    }
+
+    .filter-btn.active {
+        background: var(--panel-bg);
+        color: var(--primary);
+        box-shadow: var(--shadow);
+        transform: translateY(-1px);
+    }
+
+    .filter-btn.detail-active {
+        background: var(--panel-bg);
+        color: var(--primary);
+        box-shadow: var(--shadow);
+    }
+
+    .table-responsive {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+        position: relative;
+        padding: 0;
+        background: var(--panel-bg);
+    }
+
+    #result_table {
+        width: 100%;
+        margin: 0;
+        border-collapse: separate;
+        border-spacing: 0;
+        table-layout: fixed;
+        --bs-table-bg: transparent;
+        --bs-table-hover-bg: transparent;
+        --bs-table-striped-bg: transparent;
+        --bs-table-active-bg: transparent;
+    }
+
+    #result_table .case-name-col {
+        width: 40%;
+        min-width: 340px;
+    }
+
+    #result_table .metric-col {
+        width: 92px;
+    }
+
+    #result_table .duration-col {
+        width: 110px;
+    }
+
+    #result_table .action-col {
+        width: 118px;
+    }
+
+    #result_table thead th {
+        position: sticky;
+        top: 0;
+        z-index: 3;
+        height: 44px;
+        padding: 4px 14px 6px;
+        border-top: 1px solid var(--border);
+        border-bottom: 1px solid var(--border);
+        background: var(--panel-soft);
+        color: var(--text-muted);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0;
+        white-space: nowrap;
+    }
+
+    #result_table tbody tr {
+        background: transparent !important;
+    }
+
+    #result_table tbody tr:hover {
+        background: transparent !important;
+    }
+
+    #result_table tbody tr:hover td {
+        background: transparent !important;
+    }
+
+    #result_table td {
+        height: 48px;
+        padding: 10px 14px;
+        border-top: 0;
+        border-bottom: 1px solid var(--border);
+        background: var(--panel-bg) !important;
+        color: var(--text-main);
+        font-size: 13px;
+        vertical-align: middle;
+    }
+
+    #result_table tbody tr td:first-child {
+        border-left: 0;
+        border-radius: 0;
+    }
+
+    #result_table tbody tr td:last-child {
+        border-right: 0;
+        border-radius: 0;
+    }
+
+    #result_table tbody tr:hover td {
+        border-bottom-color: #cbd5e1;
+        box-shadow: none;
+    }
+
+    .passClass,
+    .failClass,
+    .errorClass,
+    .skipClass {
+        background: transparent;
+        border-left: 0;
+        box-shadow: inset 4px 0 0 var(--success);
+    }
+
+    .failClass { box-shadow: inset 4px 0 0 var(--warning); }
+    .errorClass { box-shadow: inset 4px 0 0 var(--danger); }
+    .skipClass { box-shadow: inset 4px 0 0 var(--info); }
+
+    .suite-name {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 13px;
+        font-weight: 850;
+        color: var(--text-main);
+    }
+
+    .suite-name i {
+        color: #334155;
+    }
+
+    [data-bs-theme="dark"] .suite-name i {
+        color: var(--text-muted);
+    }
+
+    #total_row {
+        background: transparent !important;
+        font-weight: 800;
+    }
+
+    #total_row td {
+        border-top: 1px solid var(--border);
+        background: var(--panel-bg) !important;
+    }
+
+    .testcase {
+        margin-left: 0;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--text-main);
+        font-weight: 700;
+    }
+
+    .testcase i {
+        color: var(--text-muted);
+    }
+
+    .badge {
+        min-width: 30px;
+        padding: 4px 8px;
+        border-radius: 7px;
+        font-size: 11px;
+        font-weight: 800;
+    }
+
+    .duration-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 54px;
+        padding: 3px 8px;
+        border-radius: 999px;
+        background: var(--panel-soft);
+        color: var(--text-muted);
+        border: 1px solid var(--border);
+        font-size: 11px;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .case-status-cell {
+        display: flex;
+        justify-content: center;
+    }
+
+    .case-status-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 56px;
+        height: 26px;
+        padding: 0 10px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: var(--panel-bg);
+        color: var(--text-muted);
+        font-size: 12px;
+        font-weight: 850;
+        white-space: nowrap;
+    }
+
+    .case-status-pill.passCase {
+        color: #047857;
+        border-color: #bbf7d0;
+        background: #f0fdf4;
+    }
+
+    .case-status-pill.failCase {
+        color: #92400e;
+        border-color: #fde68a;
+        background: #fffbeb;
+    }
+
+    .case-status-pill.errorCase {
+        color: #991b1b;
+        border-color: #fecaca;
+        background: #fef2f2;
+    }
+
+    .case-status-pill.skipCase {
+        color: #1d4ed8;
+        border-color: #bfdbfe;
+        background: #eff6ff;
+    }
+
+    [data-bs-theme="dark"] .case-status-pill.passCase {
+        color: #bbf7d0;
+        border-color: rgba(16, 185, 129, 0.28);
+        background: rgba(16, 185, 129, 0.12);
+    }
+
+    [data-bs-theme="dark"] .case-status-pill.failCase {
+        color: #fde68a;
+        border-color: rgba(245, 158, 11, 0.28);
+        background: rgba(245, 158, 11, 0.12);
+    }
+
+    [data-bs-theme="dark"] .case-status-pill.errorCase {
+        color: #fecaca;
+        border-color: rgba(239, 68, 68, 0.28);
+        background: rgba(239, 68, 68, 0.12);
+    }
+
+    [data-bs-theme="dark"] .case-status-pill.skipCase {
+        color: #bfdbfe;
+        border-color: rgba(59, 130, 246, 0.28);
+        background: rgba(59, 130, 246, 0.12);
+    }
+
+    .case-empty-cell {
+        color: transparent;
+    }
+
+    #result_table .btn-outline-primary,
+    #result_table .btn-outline-info {
+        min-width: 62px;
+        border-color: #dbe4ff;
+        background: #f8fbff;
+        color: var(--primary);
+    }
+
+    #result_table .popup_link {
+        border-color: var(--border);
+        background: var(--panel-bg);
+        color: var(--text-main);
+    }
+
+    #result_table .popup_link.failCase {
+        color: #92400e;
+        border-color: #fde68a;
+        background: #fffbeb;
+    }
+
+    #result_table .popup_link.errorCase {
+        color: #991b1b;
+        border-color: #fecaca;
+        background: #fef2f2;
+    }
+
+    #result_table .popup_link.skipCase {
+        color: #1d4ed8;
+        border-color: #bfdbfe;
+        background: #eff6ff;
+    }
+
+    #result_table .btn-outline-primary:hover,
+    #result_table .btn-outline-info:hover {
+        border-color: var(--primary);
+        background: #eef2ff;
+        color: var(--primary);
+    }
+
+    #result_table .btn-outline-primary {
+        height: 28px;
+        padding: 0 10px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+    }
+
+    [data-bs-theme="dark"] #result_table .btn-outline-primary,
+    [data-bs-theme="dark"] #result_table .btn-outline-info {
+        border-color: #334155;
+        background: #172033;
+        color: var(--primary);
+    }
+
+    .insights-card {
+        grid-column: 1;
+        grid-row: 1 / 3;
+        min-height: 0;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        border: 0 !important;
+        border-radius: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        overflow: visible;
+        order: 10;
+    }
+
+    .insight-panel {
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--panel-soft);
+        overflow: hidden;
+    }
+
+    .header-card .insights-card {
+        margin-top: 0;
+    }
+
+    .header-card .insight-panel {
+        flex: 0 0 auto;
+    }
+
+    .header-card .insight-panel:nth-child(2) {
+        flex: 0 0 auto;
+        min-height: 0;
+    }
+
+    .insight-panel-title {
+        flex: 0 0 auto;
+        height: 38px;
+        padding: 0 12px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid var(--border);
+        background: var(--panel-bg);
+        color: var(--text-main);
+        font-size: 13px;
+        font-weight: 800;
+    }
+
+    .insight-panel-title span {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .insight-chart {
+        flex: 1 1 auto;
+        min-height: 0;
+    }
+
+    .coverage-metrics {
+        flex: 1 1 auto;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        padding: 10px;
+    }
+
+    .coverage-metric {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        min-height: 58px;
+        padding: 10px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        background: var(--panel-bg);
+    }
+
+    .coverage-label {
+        color: var(--text-muted);
+        font-size: 11px;
+        font-weight: 700;
+    }
+
+    .coverage-value {
+        margin-top: 6px;
+        color: var(--text-main);
+        font-size: 18px;
+        font-weight: 900;
+    }
+
+    .failure-list {
+        flex: 0 0 auto;
+        min-height: 0;
+        max-height: 320px;
+        overflow: auto;
+        padding: 10px;
+        background: var(--panel-bg);
+    }
+
+    .failure-item {
+        position: relative;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 10px;
+        min-height: 54px;
+        padding: 10px 12px;
+        border: 1px solid var(--border);
+        border-radius: 9px;
+        background: var(--panel-bg);
+        color: var(--text-main);
+        box-shadow: 0 1px 1px rgba(15, 23, 42, 0.03);
+    }
+
+    .failure-item + .failure-item {
+        margin-top: 8px;
+    }
+
+    .failure-item:hover {
+        border-color: #cbd5e1;
+        box-shadow: 0 6px 14px rgba(15, 23, 42, 0.06);
+    }
+
+    [data-bs-theme="dark"] .failure-item:hover {
+        border-color: #475569;
+    }
+
+    .failure-status {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 42px;
+        height: 24px;
+        padding: 0 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 900;
+        white-space: nowrap;
+    }
+
+    .failure-status.failure {
+        color: #92400e;
+        background: #fef3c7;
+        border: 1px solid #fde68a;
+    }
+
+    .failure-status.error {
+        color: #991b1b;
+        background: #fee2e2;
+        border: 1px solid #fecaca;
+    }
+
+    [data-bs-theme="dark"] .failure-status.failure {
+        color: #fde68a;
+        background: rgba(245, 158, 11, 0.14);
+        border-color: rgba(245, 158, 11, 0.28);
+    }
+
+    [data-bs-theme="dark"] .failure-status.error {
+        color: #fecaca;
+        background: rgba(239, 68, 68, 0.14);
+        border-color: rgba(239, 68, 68, 0.28);
+    }
+
+    .failure-name {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 13px;
+        font-weight: 850;
+    }
+
+    .failure-suite {
+        margin-top: 3px;
+        color: var(--text-muted);
+        font-size: 11px;
+        font-weight: 700;
+    }
+
+    .failure-empty {
+        height: 100%;
+        min-height: 120px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-muted);
+        font-size: 12px;
+        font-weight: 800;
+    }
+
+    .btn,
+    .popup_link,
+    .popup_window_actions button,
+    .screenshot-view-btn {
+        border-radius: 8px !important;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .popup_window {
+        display: block;
+        margin: 8px 18px 6px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--panel-bg);
+        box-shadow: none;
+    }
+
+    #result_table .popup_window {
+        position: static;
+        width: auto;
+        max-width: calc(100% - 36px);
+        text-align: left;
+    }
+
+    #result_table .detail-row td {
+        height: auto;
+        padding: 0 8px 8px;
+        border-bottom: 1px solid var(--border);
+        background: var(--panel-soft) !important;
+    }
+
+    .popup_window_header {
+        min-height: 32px;
+        padding: 6px 8px 6px 10px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        border-bottom: 1px solid var(--border);
+        background: var(--panel-soft);
+        border-radius: 8px 8px 0 0;
+    }
+
+    .popup_window_header strong {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--text-main);
+    }
+
+    .popup_window_actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex: 0 0 auto;
+        margin-left: auto;
+    }
+
+    .popup_window_actions button {
+        height: 26px;
+        padding: 0 9px;
+        border-color: var(--border);
+        background: var(--panel-bg);
+        color: var(--text-muted);
+    }
+
+    .popup_window_content {
+        max-height: min(48vh, 520px);
+        overflow: auto;
+        padding: 8px 10px 10px;
+    }
+
+    .popup_window_content pre {
+        margin: 0;
+        padding: 8px 10px;
+        border: 1px solid var(--border);
+        border-radius: 7px;
+        background: var(--panel-soft);
+        color: var(--text-main);
+        font-size: 11px;
+        line-height: 1.4;
+        white-space: pre-wrap;
+    }
+
+    .screenshot-container {
+        margin-top: 8px !important;
+    }
+
+    .screenshot-container > .d-flex {
+        margin-bottom: 6px !important;
+    }
+
+    .screenshot-carousel,
+    .screenshot-item {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--panel-soft);
+    }
+
+    .table-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
+    .page-actions {
+        flex: 0 0 auto;
+    }
+
+    .report-tool-btn {
+        height: 30px;
+        padding: 0 10px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--panel-bg);
+        color: var(--text-muted);
+        font-size: 12px;
+        font-weight: 750;
+        white-space: nowrap;
+        transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease, transform 160ms ease;
+    }
+
+    .report-tool-btn:hover,
+    .report-tool-btn.active {
+        color: var(--primary);
+        border-color: #c7d2fe;
+        background: #eef2ff;
+        transform: translateY(-1px);
+    }
+
+    [data-bs-theme="dark"] .report-tool-btn:hover,
+    [data-bs-theme="dark"] .report-tool-btn.active {
+        background: rgba(129, 140, 248, 0.14);
+    }
+
+    @media (max-width: 1080px) {
+        .pt-main {
+            overflow: auto;
+        }
+
+        .pt-content.container-fluid {
+            min-height: 100vh;
+            height: auto;
+            grid-template-columns: 1fr;
+            grid-template-rows: auto auto 280px minmax(620px, 1fr);
+        }
+
+        .page-header { grid-column: 1; grid-row: 1; }
+        .header-card { grid-column: 1; grid-row: 2; }
+        .chart-card {
+            grid-column: 1;
+            grid-row: 3;
+            grid-template-columns: 1fr;
+        }
+        .header-card .insight-panel:nth-child(2) {
+            min-height: 120px;
+        }
+        .table-card { grid-column: 1; grid-row: 4; }
+    }
+
+    @media (max-width: 720px) {
+        .pt-content.container-fluid {
+            padding: 10px;
+            gap: 10px;
+        }
+
+        .header-card {
+            padding: 14px;
+        }
+
+        .report-title {
+            font-size: 18px;
+        }
+
+        .stats-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .filter-buttons {
+            width: 100%;
+        }
+
+        .filter-btn {
+            flex: 1 1 0;
+            padding: 0 8px;
+        }
+    }
+
+    @media print {
+        html,
+        body,
+        .pt-main {
+            height: auto;
+            overflow: visible;
+            background: #fff;
+        }
+
+        .pt-content.container-fluid {
+            height: auto;
+            display: block;
+            padding: 0;
+        }
+
+        .table-toolbar,
+        .filter-buttons,
+        .popup_window_actions {
+            display: none !important;
+        }
+
+        .header-card,
+        .chart-card,
+        .table-card {
+            margin-bottom: 12px;
+            break-inside: avoid;
+        }
+
+        .table-responsive {
+            overflow: visible;
+        }
+    }
 </style>
 """
 
@@ -1314,33 +2544,64 @@ body {
     #
 
     HEADING_TMPL = """
-    <!-- 主题切换按钮 -->
-    <button class="theme-toggle" onclick="toggleTheme()" title="切换主题">
-    <i class="bi bi-moon-stars-fill" id="theme-icon"></i>
-</button>
-
-    <!-- 头部卡片 -->
-    <div class='header-card'>
-        <h1 class='report-title'>
+    <div class="page-header">
+        <h1 class="page-title">
             <i class="bi bi-clipboard-check"></i>
-        %(title)s
-    </h1>
-    
-        <!-- 统计卡片网格 -->
-        <div class='stats-grid'>
-            %(parameters)s
+            %(title)s
+        </h1>
+        <div class="table-toolbar page-actions">
+            <button type="button" class="report-tool-btn" onclick="toggleTheme()" title="切换主题">
+                <i class="bi bi-moon-stars-fill" id="theme-icon"></i>
+                <span>主题</span>
+            </button>
+            <button type="button" class="report-tool-btn" onclick="savePageScreenshot()" title="保存当前页面截图">
+                <i class="bi bi-camera"></i>
+                <span>截图</span>
+            </button>
+            <button type="button" class="report-tool-btn" onclick="exportPdf()" title="通过浏览器打印导出 PDF">
+                <i class="bi bi-file-earmark-pdf"></i>
+                <span>PDF</span>
+            </button>
+        </div>
     </div>
-    
-        <p class='description text-muted' style='font-size: 1.1rem; margin-top: 1.5rem;'>%(description)s</p>
+
+    <!-- Header -->
+    <div class='header-card el-card'>
+        <div class="overview-card">
+            <div class="overview-title">
+                <i class="bi bi-info-circle"></i> 报告概览
+            </div>
+            <div class='stats-grid'>
+                %(parameters)s
+            </div>
+            <div class="description-panel">
+                <div class="description-label">
+                    <i class="bi bi-card-text"></i> 描述
+                </div>
+                <p class='description text-muted'>%(description)s</p>
+            </div>
+        </div>
+        %(insights)s
 </div>
 
-    <!-- 图表卡片 -->
-    <div class='chart-card'>
-        <div id="chart" style="width:100%%;height:500px;"></div>
+    <!-- Chart -->
+    <div class='chart-card el-card'>
+        <div class="chart-panel chart-panel-summary">
+            <div class="chart-panel-title">
+                <span><i class="bi bi-pie-chart"></i> 执行情况</span>
+            </div>
+            <div id="chart" class="chart-canvas"></div>
+        </div>
+        <div class="chart-panel chart-panel-suite">
+            <div class="chart-panel-title">
+                <span><i class="bi bi-bar-chart"></i> 套件分布</span>
+            </div>
+            <div id="suiteChart" class="chart-canvas"></div>
+        </div>
     </div>
     
     <script>
-    // 更新主题图标
+    // Update theme icon
     function updateThemeIcon() {
         const icon = document.getElementById('theme-icon');
         const theme = document.documentElement.getAttribute('data-bs-theme');
@@ -1349,20 +2610,68 @@ body {
     
     document.addEventListener('DOMContentLoaded', updateThemeIcon);
     
-    // 在toggleTheme函数中更新图标
+    // Update the icon after toggling the theme.
     const originalToggleTheme = window.toggleTheme;
     window.toggleTheme = function() {
         originalToggleTheme();
         updateThemeIcon();
     };
     </script>
-"""  # variables: (title, parameters, description)
+"""  # variables: (title, parameters, description, insights)
+
+    INSIGHTS_TMPL = """
+    <div class="insights-card el-card">
+        <div class="insight-panel">
+            <div class="insight-panel-title">
+                <span><i class="bi bi-camera"></i> 覆盖统计</span>
+            </div>
+            <div class="coverage-metrics">
+                <div class="coverage-metric">
+                    <div class="coverage-label">截图总数</div>
+                    <div class="coverage-value">%(screenshot_count)s</div>
+                </div>
+                <div class="coverage-metric">
+                    <div class="coverage-label">有截图用例</div>
+                    <div class="coverage-value">%(screenshot_case_count)s</div>
+                </div>
+                <div class="coverage-metric">
+                    <div class="coverage-label">有输出用例</div>
+                    <div class="coverage-value">%(output_case_count)s</div>
+                </div>
+                <div class="coverage-metric">
+                    <div class="coverage-label">平均耗时</div>
+                    <div class="coverage-value">%(avg_duration)s</div>
+                </div>
+            </div>
+        </div>
+        <div class="insight-panel">
+            <div class="insight-panel-title">
+                <span><i class="bi bi-bug"></i> 失败/错误用例</span>
+            </div>
+            <div class="failure-list">
+                %(failure_items)s
+            </div>
+        </div>
+    </div>
+"""  # variables: (screenshot_count, screenshot_case_count, output_case_count, avg_duration, failure_items)
+
+    FAILURE_ITEM_TMPL = """
+                <div class="failure-item %(status_class)s">
+                    <div>
+                        <div class="failure-name" title="%(name)s">%(name)s</div>
+                        <div class="failure-suite">%(suite)s</div>
+                    </div>
+                    %(badge)s
+                </div>
+"""
 
     HEADING_ATTRIBUTE_TMPL = """
-            <div class='stat-card %(card_class)s'>
-                <i class='%(icon)s stat-icon'></i>
-                <div class='stat-label'>%(name)s</div>
-                <div class='stat-value'>%(value)s</div>
+            <div class='meta-item %(card_class)s'>
+                <i class='%(icon)s meta-icon'></i>
+                <div class="meta-body">
+                    <span class='meta-label'>%(name)s</span>
+                    <span class='meta-value'>%(value)s</span>
+                </div>
             </div>
 """  # variables: (name, value, card_class, icon)
 
@@ -1371,46 +2680,53 @@ body {
     #
 
     REPORT_TMPL = u"""
-    <div class="table-card">
+    <div class="table-card el-card">
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h2 class="mb-0">
                 <i class="bi bi-list-check"></i> 测试详情
         </h2>
-            <div class="filter-buttons btn-group" role="group">
-                <button type="button" class="filter-btn active" onclick='showCase(0)'>
+            <div class="table-toolbar">
+                <div class="filter-buttons btn-group" role="group">
+                    <button type="button" class="filter-btn active" onclick='showCase(0)'>
                     <i class="bi bi-clipboard-data"></i> 总结
-            </button>
-                <button type="button" class="filter-btn" onclick='showCase(1)'>
+                    </button>
+                    <button type="button" class="filter-btn" onclick='showCase(1)'>
                     <i class="bi bi-exclamation-triangle"></i> 失败
-            </button>
-                <button type="button" class="filter-btn" onclick='showCase(2)'>
+                    </button>
+                    <button type="button" class="filter-btn" onclick='showCase(2)'>
                     <i class="bi bi-list-ul"></i> 全部
-            </button>
+                    </button>
+                    <button type="button" class="filter-btn" onclick="toggleAllDetails(this)" title="展开或收起所有详情">
+                    <i class="bi bi-arrows-expand"></i> <span class="tool-label">展开详情</span>
+                    </button>
+                </div>
         </div>
     </div>
     
     <div class="table-responsive">
-            <table id='result_table' class="table table-hover align-middle">
+            <table id='result_table' class="table align-middle">
             <thead>
                 <tr>
-                        <th style="min-width: 300px;"><i class="bi bi-folder2-open"></i> 测试套件/测试用例</th>
-                        <th class="text-center" style="width: 100px;"><i class="bi bi-hash"></i> 总数</th>
-                        <th class="text-center" style="width: 100px;"><i class="bi bi-check-circle"></i> 通过</th>
-                        <th class="text-center" style="width: 100px;"><i class="bi bi-x-circle"></i> 失败</th>
-                        <th class="text-center" style="width: 100px;"><i class="bi bi-exclamation-circle"></i> 错误</th>
-                        <th class="text-center" style="width: 100px;"><i class="bi bi-dash-circle"></i> 跳过</th>
-                        <th class="text-center" style="width: 120px;"><i class="bi bi-eye"></i> 查看</th>
+                        <th class="case-name-col">测试套件/测试用例</th>
+                        <th class="metric-col text-center">总数</th>
+                        <th class="metric-col text-center">通过</th>
+                        <th class="metric-col text-center">失败</th>
+                        <th class="metric-col text-center">错误</th>
+                        <th class="metric-col text-center">跳过</th>
+                        <th class="duration-col text-center">耗时</th>
+                        <th class="action-col text-center">查看</th>
                 </tr>
             </thead>
             <tbody>
                 %(test_list)s
                     <tr id='total_row'>
-                        <td><strong><i class="bi bi-calculator"></i> 总计</strong></td>
+                        <td><span class="suite-name"><i class="bi bi-calculator"></i> 总计</span></td>
     <td class="text-center"><strong>%(count)s</strong></td>
                         <td class="text-center"><span class="badge bg-success">%(Pass)s</span></td>
     <td class="text-center"><span class="badge bg-warning">%(fail)s</span></td>
     <td class="text-center"><span class="badge bg-danger">%(error)s</span></td>
     <td class="text-center"><span class="badge bg-primary">%(skip)s</span></td>
+    <td class="text-center">&nbsp;</td>
     <td>&nbsp;</td>
                     </tr>
                 </tbody>
@@ -1422,13 +2738,14 @@ body {
     REPORT_CLASS_TMPL = u"""
     <tr class='%(style)s'>
         <td>
-            <strong><i class="bi bi-folder-fill"></i> %(desc)s</strong>
+            <span class="suite-name"><i class="bi bi-folder-fill"></i> %(desc)s</span>
         </td>
     <td class="text-center">%(count)s</td>
         <td class="text-center"><span class="badge bg-success">%(Pass)s</span></td>
     <td class="text-center"><span class="badge bg-warning">%(fail)s</span></td>
     <td class="text-center"><span class="badge bg-danger">%(error)s</span></td>
     <td class="text-center"><span class="badge bg-primary">%(skip)s</span></td>
+    <td class="text-center"><span class="duration-pill">%(duration)s</span></td>
     <td class="text-center">
             <a href="javascript:showClassDetail('%(cid)s',%(count)s)" class="btn btn-sm btn-outline-primary">
                 <i class="bi bi-chevron-down"></i> 详情
@@ -1444,13 +2761,21 @@ body {
             <i class="bi bi-file-earmark-code"></i> %(desc)s
         </div>
     </td>
-    <td colspan='5'>
-        <div class="text-center">
-            <a class="popup_link btn btn-sm btn-outline-info" onfocus='this.blur();' href="javascript:showTestDetail('div_%(tid)s')">
-                <i class="bi bi-info-circle"></i> %(status)s
-            </a>
-        </div>
-        <div id='div_%(tid)s' class="popup_window">
+    <td class="text-center case-empty-cell">&nbsp;</td>
+    <td class="text-center">%(pass_cell)s</td>
+    <td class="text-center">%(fail_cell)s</td>
+    <td class="text-center">%(error_cell)s</td>
+    <td class="text-center">%(skip_cell)s</td>
+    <td class="text-center"><span class="duration-pill">%(duration)s</span></td>
+    <td class="text-center">
+        <a class="popup_link %(status_class)s btn btn-sm btn-outline-info" onfocus='this.blur();' href="javascript:showTestDetail('div_%(tid)s')">
+            <i class="bi bi-info-circle"></i> 详情
+        </a>
+    </td>
+</tr>
+<tr id='div_%(tid)s' class="detail-row" style='display:none;'>
+    <td colspan="8">
+        <div class="popup_window">
             <div class="popup_window_header">
                 <strong><i class="bi bi-terminal"></i> 执行详情</strong>
                 <div class="popup_window_actions">
@@ -1469,13 +2794,13 @@ body {
         </div>
     </td>
 </tr>
-"""  # variables: (tid, Class, style, desc, status, screenshots)
+"""  # variables: (tid, Class, style, desc, status, status cells, screenshots)
 
     REPORT_TEST_OUTPUT_TMPL = r"""%(id)s: %(output)s"""  # variables: (id, output)
 
     SCREENSHOT_TMPL = """
-    <div class="screenshot-container mt-3" id="screenshot-%(tid)s">
-        <div class="d-flex justify-content-between align-items-center mb-2">
+    <div class="screenshot-container" id="screenshot-%(tid)s">
+        <div class="d-flex justify-content-between align-items-center">
             <h6 class="mb-0"><i class="bi bi-card-image"></i> 截图 (%(count)s)</h6>
             <div class="screenshot-view-toggle" style="%(toggle_style)s">
                 <button class="btn btn-sm btn-outline-secondary screenshot-view-btn %(btn_carousel_active)s" onclick="switchScreenshotView('%(tid)s', 'carousel')" title="轮播视图">
@@ -1487,7 +2812,7 @@ body {
             </div>
         </div>
         
-        <!-- 轮播视图 -->
+        <!-- Carousel view -->
         <div class="screenshot-carousel" id="carousel-%(tid)s" style="%(carousel_style)s">
             <div class="screenshot-carousel-inner" id="carousel-inner-%(tid)s">
                 %(carousel_items)s
@@ -1503,7 +2828,7 @@ body {
             </div>
         </div>
         
-        <!-- 网格视图 -->
+        <!-- Grid view -->
         <div class="screenshot-grid" id="grid-%(tid)s" style="%(grid_style)s">
             %(grid_items)s
         </div>
@@ -1530,44 +2855,17 @@ body {
 """
 
     # ------------------------------------------------------------------------
-    # ENDING
+    # Page scripts
     #
 
     ENDING_TMPL = """
-    <div id='ending' class='text-center py-5'>
-        <div class='card' style='background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-radius: 15px; padding: 2rem; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);'>
-            <p class='text-muted mb-2'>
-        <i class="bi bi-code-square"></i>
-                Powered by <strong>HTMLTestRunner</strong> v1.0.5 - Modern UI Edition
-    </p>
-            <p class='text-muted mb-2' style='font-size: 0.875rem;'>
-        <i class="bi bi-person-circle"></i>
-                Author: <strong>Lit</strong>
-    </p>
-            <p class='text-muted mb-0' style='font-size: 0.875rem;'>
-        <i class="bi bi-calendar3"></i>
-                Generated on <span id='generation-time'></span>
-    </p>
-        </div>
-    </div>
-
 <script>
-    // 显示生成时间
-    document.getElementById('generation-time').textContent = new Date().toLocaleString('zh-CN', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit'
-    });
-
-    // 图片预览模态框功能 - 支持轮播
+    // Image preview modal with carousel support.
     let currentModalImages = [];
     let currentModalIndex = 0;
 
     function openImageModal(tid, index) {
-        // 1. 收集该组的所有图片信息
+        // Collect all screenshots for this case.
         const gridContainer = document.getElementById('grid-' + tid);
         if (!gridContainer) return;
         
@@ -1580,7 +2878,7 @@ body {
         
         let modal = document.getElementById('imageModal');
         if (!modal) {
-            // 创建模态框 DOM
+            // Create modal DOM.
             const modalHtml = `
                 <div id="imageModal" class="image-modal">
                     <div class="image-modal-close" onclick="closeImageModal()">
@@ -1600,7 +2898,7 @@ body {
             document.body.insertAdjacentHTML('beforeend', modalHtml);
             modal = document.getElementById('imageModal');
             
-            // 点击背景关闭
+            // Click backdrop to close.
             modal.addEventListener('click', function(e) {
                 if (e.target === modal) closeImageModal();
             });
@@ -1640,7 +2938,7 @@ body {
         }
     }
 
-    // 键盘事件：ESC关闭，左右键切换
+    // Keyboard shortcuts: ESC closes, arrow keys switch images.
     document.addEventListener('keydown', function(event) {
         const modal = document.getElementById('imageModal');
         if (modal && modal.style.display === 'block') {
@@ -1654,8 +2952,8 @@ body {
         }
     });
 
-    // 截图轮播功能
-    const carouselStates = {};  // 存储每个轮播的当前索引
+    // Screenshot carousel state.
+    const carouselStates = {};
 
     function switchScreenshotView(tid, view) {
         const carousel = document.getElementById('carousel-' + tid);
@@ -1718,7 +3016,7 @@ body {
         });
     }
 
-    // 初始化所有轮播
+    // Initialize all screenshot carousels.
     document.addEventListener('DOMContentLoaded', function() {
         document.querySelectorAll('.screenshot-carousel').forEach(carousel => {
             const tid = carousel.id.replace('carousel-', '');
@@ -1756,17 +3054,21 @@ class _TestResult(TestResult):
         #   TestCase object,
         #   Test output (byte string),
         #   stack trace,
-        #   screenshots,  # 新增：截图列表
+        #   screenshots,
         # )
         self.result = []
         self.subtestlist = []
         self.outputBuffer = io.StringIO()
         self.test_start_time = round(time.time(), 2)
-        self.current_screenshots = []  # 新增：当前测试的截图列表
+        self.current_test_start_time = None
+        self.current_screenshots = []
 
     def startTest(self, test):
+        global _current_result
+        _current_result = self
         TestResult.startTest(self, test)
-        self.current_screenshots = []  # 新增：重置截图列表
+        self.current_screenshots = []
+        self.current_test_start_time = time.time()
         # just one buffer for both stdout and stderr
         self.outputBuffer = io.StringIO()
         stdout_redirector.fp = self.outputBuffer
@@ -1776,17 +3078,19 @@ class _TestResult(TestResult):
         sys.stdout = stdout_redirector
         sys.stderr = stderr_redirector
 
+    def _elapsed(self):
+        if self.current_test_start_time is None:
+            return 0.0
+        return round(time.time() - self.current_test_start_time, 4)
+
     def attach_screenshot(self, image_source, description=""):
-        """添加截图到当前测试"""
+        # Attach a screenshot to the current test.
         screenshot = ScreenshotManager.to_base64(image_source, description)
         if screenshot:
             self.current_screenshots.append(screenshot)
 
     def complete_output(self):
-        """
-        Disconnect output redirection and return buffer.
-        Safe to call multiple times.
-        """
+        # Disconnect output redirection and return buffer. Safe to call multiple times.
         if self.stdout0:
             sys.stdout = self.stdout0
             sys.stderr = self.stderr0
@@ -1795,17 +3099,20 @@ class _TestResult(TestResult):
         return self.outputBuffer.getvalue()
 
     def stopTest(self, test):
+        global _current_result
         # Usually one of addSuccess, addError or addFailure would have been called.
         # But there are some path in unittest that would bypass this.
         # We must disconnect stdout in stopTest(), which is guaranteed to be called.
         self.complete_output()
+        if _current_result is self:
+            _current_result = None
 
     def addSuccess(self, test):
         if test not in self.subtestlist:
             self.success_count += 1
             TestResult.addSuccess(self, test)
             output = self.complete_output()
-            self.result.append((0, test, output, '', self.current_screenshots[:]))
+            self.result.append((0, test, output, '', self.current_screenshots[:], self._elapsed()))
             if self.verbosity > 1:
                 sys.stderr.write('ok ')
                 sys.stderr.write(str(test))
@@ -1818,7 +3125,7 @@ class _TestResult(TestResult):
         TestResult.addError(self, test, err)
         _, _exc_str = self.errors[-1]
         output = self.complete_output()
-        self.result.append((2, test, output, _exc_str, self.current_screenshots[:]))
+        self.result.append((2, test, output, _exc_str, self.current_screenshots[:], self._elapsed()))
         if self.verbosity > 1:
             sys.stderr.write('E  ')
             sys.stderr.write(str(test))
@@ -1831,7 +3138,7 @@ class _TestResult(TestResult):
         TestResult.addFailure(self, test, err)
         _, _exc_str = self.failures[-1]
         output = self.complete_output()
-        self.result.append((1, test, output, _exc_str, self.current_screenshots[:]))
+        self.result.append((1, test, output, _exc_str, self.current_screenshots[:], self._elapsed()))
         if self.verbosity > 1:
             sys.stderr.write('F  ')
             sys.stderr.write(str(test))
@@ -1843,7 +3150,7 @@ class _TestResult(TestResult):
         self.skip_count += 1
         TestResult.addSkip(self, test, reason)
         output = self.complete_output()
-        self.result.append((3, test, output, 'Skipped: ' + reason, self.current_screenshots[:]))
+        self.result.append((3, test, output, 'Skipped: ' + reason, self.current_screenshots[:], self._elapsed()))
         if self.verbosity > 1:
             sys.stderr.write('SKIP ')
             sys.stderr.write(str(test))
@@ -1861,7 +3168,7 @@ class _TestResult(TestResult):
                 errors.append((subtest, self._exc_info_to_string(err, subtest)))
                 output = self.complete_output()
                 self.result.append((1, test, output + '\nSubTestCase Failed:\n' + str(subtest),
-                                    self._exc_info_to_string(err, subtest), self.current_screenshots[:]))
+                                    self._exc_info_to_string(err, subtest), self.current_screenshots[:], self._elapsed()))
                 if self.verbosity > 1:
                     sys.stderr.write('F  ')
                     sys.stderr.write(str(subtest))
@@ -1874,7 +3181,7 @@ class _TestResult(TestResult):
                 errors.append((subtest, self._exc_info_to_string(err, subtest)))
                 output = self.complete_output()
                 self.result.append(
-                    (2, test, output + '\nSubTestCase Error:\n' + str(subtest), self._exc_info_to_string(err, subtest), self.current_screenshots[:]))
+                    (2, test, output + '\nSubTestCase Error:\n' + str(subtest), self._exc_info_to_string(err, subtest), self.current_screenshots[:], self._elapsed()))
                 if self.verbosity > 1:
                     sys.stderr.write('E  ')
                     sys.stderr.write(str(subtest))
@@ -1887,7 +3194,7 @@ class _TestResult(TestResult):
             self.subtestlist.append(test)
             self.success_count += 1
             output = self.complete_output()
-            self.result.append((0, test, output + '\nSubTestCase Pass:\n' + str(subtest), '', self.current_screenshots[:]))
+            self.result.append((0, test, output + '\nSubTestCase Pass:\n' + str(subtest), '', self.current_screenshots[:], self._elapsed()))
             if self.verbosity > 1:
                 sys.stderr.write('ok ')
                 sys.stderr.write(str(subtest))
@@ -1896,7 +3203,7 @@ class _TestResult(TestResult):
                 sys.stderr.write('S')
 
 
-class HTMLTestRunnerLit(Template_mixin):
+class UhtmlLit(Template_mixin):
 
     def __init__(self, stream=sys.stdout, verbosity=1, title=None, description=None, tester=None, open_in_browser=False):
         self.stream = stream
@@ -1921,14 +3228,16 @@ class HTMLTestRunnerLit(Template_mixin):
         "Run the given test case or test suite."
         global _current_result
         result = _TestResult(self.verbosity)
-        _current_result = result  # 新增：设置全局引用
-        test(result)
-        _current_result = None  # 新增：清除全局引用
+        _current_result = result
+        try:
+            test(result)
+        finally:
+            _current_result = None
         self.stopTime = datetime.datetime.now()
         self.generateReport(test, result)
         print('\nTime 运行时长: %s' % (self.stopTime-self.startTime), file=sys.stderr)
         
-        # 自动打开报告
+        # Open the report automatically when requested.
         if self.open_in_browser and hasattr(self.stream, 'name'):
             report_path = os.path.abspath(self.stream.name)
             webbrowser.open('file://' + report_path)
@@ -1941,44 +3250,48 @@ class HTMLTestRunnerLit(Template_mixin):
         # Here at least we want to group them together by class.
         rmap = {}
         classes = []
-        for n,t,o,e,*screenshots_list in result_list:
+        for n,t,o,e,*extra in result_list:
             cls = t.__class__
             if cls not in rmap:
                 rmap[cls] = []
                 classes.append(cls)
-            screenshots = screenshots_list[0] if screenshots_list else []
-            rmap[cls].append((n,t,o,e,screenshots))
+            screenshots = extra[0] if extra else []
+            duration = extra[1] if len(extra) > 1 else 0.0
+            rmap[cls].append((n,t,o,e,screenshots,duration))
         r = [(cls, rmap[cls]) for cls in classes]
         return r
 
     def getReportAttributes(self, result):
-        """
-        Return report attributes as a list of (name, value).
-        Override this to add custom attributes.
-        """
+        # Return report attributes as a list of (name, value).
+        # Override this to add custom attributes.
         startTime = str(self.startTime)[:19]
-        duration = str(self.stopTime - self.startTime)
+        duration = self._format_duration((self.stopTime - self.startTime).total_seconds())
         status = []
-        if result.success_count: status.append(u'通过 %s' % result.success_count)
-        if result.failure_count: status.append(u'失败 %s' % result.failure_count)
-        if result.error_count:   status.append(u'错误 %s' % result.error_count)
-        if result.skip_count:    status.append(u'跳过 %s' % result.skip_count)
+        if result.success_count:
+            status.append('<span class="report-status-pill pass">通过 %s</span>' % result.success_count)
+        if result.failure_count:
+            status.append('<span class="report-status-pill fail">失败 %s</span>' % result.failure_count)
+        if result.error_count:
+            status.append('<span class="report-status-pill error">错误 %s</span>' % result.error_count)
+        if result.skip_count:
+            status.append('<span class="report-status-pill skip">跳过 %s</span>' % result.skip_count)
         if status:
-            status = ' '.join(status)
+            status = '<span class="report-status-list">%s</span>' % ''.join(status)
         else:
-            status = 'none'
+            status = '<span class="report-status-pill neutral">无结果</span>'
         return [
-            (u'开始时间', startTime),
-            (u'运行时长', duration),
-            (u'状态', status),
-            (u'测试人', self.tester),
+            ('开始时间', startTime),
+            ('运行时长', duration),
+            ('状态', status),
+            ('测试人员', self.tester),
         ]
 
     def generateReport(self, test, result):
         report_attrs = self.getReportAttributes(result)
-        generator = 'HTMLTestRunner %s' % __version__
+        generator = 'UhtmlLit %s' % __version__
         stylesheet = self._generate_stylesheet()
-        heading = self._generate_heading(report_attrs)
+        insights = self._generate_insights(result)
+        heading = self._generate_heading(report_attrs, insights)
         report = self._generate_report(result)
         ending = self._generate_ending()
         chart = self._generate_chart(result)
@@ -1996,21 +3309,22 @@ class HTMLTestRunnerLit(Template_mixin):
     def _generate_stylesheet(self):
         return self.STYLESHEET_TMPL
 
-    def _generate_heading(self, report_attrs):
+    def _generate_heading(self, report_attrs, insights):
         a_lines = []
-        # 为每个属性定义图标和卡片样式
+        # Icon and color mapping for report attributes.
         attr_config = {
-            u'开始时间': {'icon': 'bi bi-clock-history', 'class': 'info'},
-            u'运行时长': {'icon': 'bi bi-stopwatch', 'class': 'primary'},
-            u'状态': {'icon': 'bi bi-flag-fill', 'class': 'success'},
-            u'测试人': {'icon': 'bi bi-person-fill', 'class': 'secondary'},
+            '开始时间': {'icon': 'bi bi-clock-history', 'class': 'info'},
+            '运行时长': {'icon': 'bi bi-stopwatch', 'class': 'primary'},
+            '状态': {'icon': 'bi bi-flag-fill', 'class': 'success'},
+            '测试人员': {'icon': 'bi bi-person-fill', 'class': 'secondary'},
         }
         
         for name, value in report_attrs:
             config = attr_config.get(name, {'icon': 'bi bi-info-circle', 'class': 'info'})
+            value_html = value if name == '状态' else saxutils.escape(value)
             line = self.HEADING_ATTRIBUTE_TMPL % dict(
                 name = saxutils.escape(name),
-                value = saxutils.escape(value),
+                value = value_html,
                 card_class = config['class'],
                 icon = config['icon'],
             )
@@ -2019,8 +3333,73 @@ class HTMLTestRunnerLit(Template_mixin):
             title = saxutils.escape(self.title),
             parameters = ''.join(a_lines),
             description = saxutils.escape(self.description),
+            insights = insights,
         )
         return heading
+
+    def _collect_case_metrics(self, result):
+        cases = []
+        sortedResult = self.sortResult(result.result)
+        for cls, cls_results in sortedResult:
+            if cls.__module__ == "__main__":
+                suite_name = cls.__name__
+            else:
+                suite_name = "%s.%s" % (cls.__module__, cls.__name__)
+
+            for n, test, output, error, *extra in cls_results:
+                screenshots = extra[0] if extra else []
+                duration = extra[1] if len(extra) > 1 else 0.0
+                test_name = test.id().split('.')[-1]
+                desc = test.shortDescription()
+                if desc:
+                    test_name = '%s: %s' % (test_name, desc)
+                cases.append({
+                    'status': n,
+                    'suite': suite_name,
+                    'name': test_name,
+                    'output': output,
+                    'error': error,
+                    'screenshots': screenshots,
+                    'duration': float(duration or 0),
+                })
+        return cases
+
+    def _generate_insights(self, result):
+        cases = self._collect_case_metrics(result)
+        screenshot_count = sum(len(case['screenshots']) for case in cases)
+        screenshot_case_count = sum(1 for case in cases if case['screenshots'])
+        output_case_count = sum(1 for case in cases if case['output'] or case['error'])
+        avg_duration = (sum(case['duration'] for case in cases) / len(cases)) if cases else 0
+
+        failure_items = []
+        for case in cases:
+            if case['status'] not in (1, 2):
+                continue
+            if case['status'] == 1:
+                status_class = 'failure'
+                badge = '<span class="failure-status failure">失败</span>'
+            else:
+                status_class = 'error'
+                badge = '<span class="failure-status error">错误</span>'
+            failure_items.append(self.FAILURE_ITEM_TMPL % dict(
+                status_class=status_class,
+                badge=badge,
+                name=saxutils.escape(case['name']),
+                suite=saxutils.escape(case['suite']),
+            ))
+
+        if not failure_items:
+            failure_html = '<div class="failure-empty"><i class="bi bi-check-circle me-2"></i> 暂无失败或错误用例</div>'
+        else:
+            failure_html = ''.join(failure_items)
+
+        return self.INSIGHTS_TMPL % dict(
+            screenshot_count=screenshot_count,
+            screenshot_case_count=screenshot_case_count,
+            output_case_count=output_case_count,
+            avg_duration=self._format_duration(avg_duration),
+            failure_items=failure_html,
+        )
 
     def _generate_report(self, result):
         rows = []
@@ -2028,11 +3407,13 @@ class HTMLTestRunnerLit(Template_mixin):
         for cid, (cls, cls_results) in enumerate(sortedResult):
             # subtotal for a class
             np = nf = ne = ns = 0
-            for n,t,o,e,*screenshots_list in cls_results:
+            class_duration = 0.0
+            for n,t,o,e,*extra in cls_results:
                 if n == 0: np += 1
                 elif n == 1: nf += 1
                 elif n == 2: ne += 1
                 else: ns += 1
+                class_duration += extra[1] if len(extra) > 1 else 0.0
             
             # format class description
             if cls.__module__ == "__main__":
@@ -2050,13 +3431,15 @@ class HTMLTestRunnerLit(Template_mixin):
                 fail = nf,
                 error = ne,
                 skip = ns,
+                duration = self._format_duration(class_duration),
                 cid = 'c%s' % (cid+1),
             )
             rows.append(row)
 
-            for tid, (n,t,o,e,*screenshots_list) in enumerate(cls_results):
-                screenshots = screenshots_list[0] if screenshots_list else []
-                self._generate_report_test(rows, cid, tid, n, t, o, e, screenshots)
+            for tid, (n,t,o,e,*extra) in enumerate(cls_results):
+                screenshots = extra[0] if extra else []
+                duration = extra[1] if len(extra) > 1 else 0.0
+                self._generate_report_test(rows, cid, tid, n, t, o, e, screenshots, duration)
 
         report = self.REPORT_TMPL % dict(
             test_list = ''.join(rows),
@@ -2069,15 +3452,57 @@ class HTMLTestRunnerLit(Template_mixin):
         return report
 
     def _generate_chart(self, result):
+        suite_stats = []
+        sortedResult = self.sortResult(result.result)
+
+        for cls, cls_results in sortedResult:
+            np = nf = ne = ns = 0
+            for n, _t, _o, _e, *_extra in cls_results:
+                if n == 0:
+                    np += 1
+                elif n == 1:
+                    nf += 1
+                elif n == 2:
+                    ne += 1
+                else:
+                    ns += 1
+
+            if cls.__module__ == "__main__":
+                name = cls.__name__
+            else:
+                name = "%s.%s" % (cls.__module__, cls.__name__)
+
+            suite_stats.append({
+                'name': name,
+                'pass': np,
+                'fail': nf,
+                'error': ne,
+                'skip': ns,
+            })
+
         chart = self.ECHARTS_SCRIPT % dict(
             Pass=str(result.success_count),
             fail=str(result.failure_count),
             error=str(result.error_count),
             skip=str(result.skip_count),
+            suite_stats=json.dumps(suite_stats, ensure_ascii=False),
         )
         return chart
 
-    def _generate_report_test(self, rows, cid, tid, n, t, o, e, screenshots=None):
+    def _format_duration(self, seconds):
+        seconds = float(seconds or 0)
+        if seconds < 1:
+            milliseconds = seconds * 1000
+            if milliseconds < 0.01:
+                return '0 ms'
+            return ('%.2f' % milliseconds).rstrip('0').rstrip('.') + ' ms'
+        if seconds < 60:
+            return ('%.2f' % seconds).rstrip('0').rstrip('.') + ' s'
+        minutes = int(seconds // 60)
+        remain_seconds = seconds % 60
+        return '%dm %ss' % (minutes, ('%.2f' % remain_seconds).rstrip('0').rstrip('.'))
+
+    def _generate_report_test(self, rows, cid, tid, n, t, o, e, screenshots=None, duration=0.0):
         # e.g. 'pt1.1', 'ft1.1', 'st1.1', etc
         # n == 0: pass, 1: fail, 2: error, 3: skip
         if n == 0:
@@ -2091,7 +3516,7 @@ class HTMLTestRunnerLit(Template_mixin):
         doc = t.shortDescription() or ""
         desc = doc and ('%s: %s' % (name, doc)) or name
         
-        # 所有测试用例都使用WITH_OUTPUT模板，即使没有输出也显示详情按钮
+        # Always use the detail template so every case has an expandable detail panel.
         tmpl = self.REPORT_TEST_WITH_OUTPUT_TMPL
 
         script = self.REPORT_TEST_OUTPUT_TMPL % dict(
@@ -2099,12 +3524,12 @@ class HTMLTestRunnerLit(Template_mixin):
             output=saxutils.escape(o+e) if (o or e) else '无输出信息',
         )
 
-        # 生成截图 HTML
+        # Generate screenshot HTML.
         screenshot_html = ''
         if screenshots and len(screenshots) > 0:
             count = len(screenshots)
             
-            # 判断默认视图：2张及以上使用轮播，否则使用网格
+            # Use carousel for multiple screenshots, grid for a single screenshot.
             if count >= 2:
                 default_view = 'carousel'
                 toggle_style = ''
@@ -2120,7 +3545,7 @@ class HTMLTestRunnerLit(Template_mixin):
                 btn_carousel_active = ''
                 btn_grid_active = 'active'
 
-            # 生成轮播项
+            # Generate carousel items.
             carousel_items = []
             for i, screenshot in enumerate(screenshots):
                 item = self.SCREENSHOT_CAROUSEL_ITEM_TMPL % {
@@ -2131,7 +3556,7 @@ class HTMLTestRunnerLit(Template_mixin):
                 }
                 carousel_items.append(item)
             
-            # 生成网格项
+            # Generate grid items.
             grid_items = []
             for i, screenshot in enumerate(screenshots):
                 item = self.SCREENSHOT_GRID_ITEM_TMPL % {
@@ -2142,7 +3567,7 @@ class HTMLTestRunnerLit(Template_mixin):
                 }
                 grid_items.append(item)
             
-            # 生成指示器
+            # Generate carousel indicators.
             indicators = []
             for i in range(len(screenshots)):
                 active_class = 'active' if i == 0 else ''
@@ -2162,17 +3587,16 @@ class HTMLTestRunnerLit(Template_mixin):
             }
 
         if n == 0:
-            style = 'none'
-            badge = '<span class="badge bg-success"><i class="bi bi-check-lg"></i> %s</span>' % self.STATUS[n]
+            style = 'passCase'
         elif n == 1:
             style = 'failCase'
-            badge = '<span class="badge bg-warning"><i class="bi bi-x-lg"></i> %s</span>' % self.STATUS[n]
         elif n == 2:
             style = 'errorCase'
-            badge = '<span class="badge bg-danger"><i class="bi bi-exclamation-triangle-fill"></i> %s</span>' % self.STATUS[n]
         else:  # n == 3 (skip)
             style = 'skipCase'
-            badge = '<span class="badge bg-primary"><i class="bi bi-dash-circle"></i> %s</span>' % self.STATUS[n]
+
+        empty_cell = '<span class="case-empty-cell">&nbsp;</span>'
+        status_cell = '<span class="case-status-pill %s">%s</span>' % (style, self.STATUS[n])
 
         row = tmpl % dict(
             tid=tid,
@@ -2181,7 +3605,13 @@ class HTMLTestRunnerLit(Template_mixin):
             desc=desc,
             script=script,
             status=self.STATUS[n],
+            status_class=style,
+            pass_cell=status_cell if n == 0 else empty_cell,
+            fail_cell=status_cell if n == 1 else empty_cell,
+            error_cell=status_cell if n == 2 else empty_cell,
+            skip_cell=status_cell if n == 3 else empty_cell,
             screenshots=screenshot_html,
+            duration=self._format_duration(duration),
         )
         rows.append(row)
 
@@ -2197,16 +3627,14 @@ class HTMLTestRunnerLit(Template_mixin):
 # build our own launcher to support more specific command line
 # parameters like test title, CSS, etc.
 class TestProgram(unittest.TestProgram):
-    """
-    A variation of the unittest.TestProgram. Please refer to the base
-    class for command line parameters.
-    """
+    # A variation of unittest.TestProgram. Refer to the base class for
+    # command line parameters.
     def runTests(self):
-        # Pick HTMLTestRunner as the default test runner.
+        # Pick UhtmlLit as the default test runner.
         # base class's testRunner parameter is not useful because it means
-        # we have to instantiate HTMLTestRunner before we know self.verbosity.
+        # we have to instantiate UhtmlLit before we know self.verbosity.
         if self.testRunner is None:
-            self.testRunner = HTMLTestRunnerLit(verbosity=self.verbosity)
+            self.testRunner = UhtmlLit(verbosity=self.verbosity)
         unittest.TestProgram.runTests(self)
 
 main = TestProgram
@@ -2217,3 +3645,4 @@ main = TestProgram
 
 if __name__ == "__main__":
     main(module=None)
+
