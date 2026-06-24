@@ -1,4 +1,4 @@
-<div align="center"><img width="300" alt="image" src="docs/HTMLTestRunner-Lit_logo.png" /></div>
+<div align="center"><img width="200" alt="image" src="docs/HTMLTestRunner-Lit_logo.png" /></div>
 
 # UhtmlLit
 
